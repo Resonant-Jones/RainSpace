@@ -1,0 +1,45 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# --- Node / frontend ---
+node_modules/
+web/dist/
+web/build/
+web/coverage/
+web/.vite/
+web/playwright-report/
+web/test-results/
+web/blob-report/
+web/.playwright/
+test-results/
+playwright-report/
+blob-report/
+
+# --- Secrets and local environment ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# --- Local service data and media artifacts ---
+pgdata/
+uploads/
+media/
+*.sqlite3
+*.dump
+
+# --- Editors and OS ---
+.DS_Store
+.idea/
+.vscode/
+*.swp

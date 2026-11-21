@@ -1,0 +1,42 @@
+[project]
+name = "creator-distribution-platform-api"
+version = "0.1.0"
+description = "Creator-scoped catalog API for the Creator Distribution Platform foundation (CDP-001)."
+requires-python = ">=3.12"
+
+# Pinned exact versions. This table is the single source of truth for the
+# backend dependency set; the container image installs from it.
+dependencies = [
+    "fastapi==0.165.0",
+    "uvicorn[standard]==0.54.0",
+    "sqlalchemy==2.1.9",
+    "psycopg[binary]==3.3.9",
+    "pgvector==0.5.1",
+    "numpy==2.5.5",
+    "pydantic==2.14.4",
+    "pydantic-settings==2.16.3",
+    "alembic==1.20.1",
+]
+
+# Test tooling. Installed in the container so `pytest` runs against the same
+# environment the API runs in.
+[project.optional-dependencies]
+dev = [
+    "pytest==9.2.0",
+    "httpx==0.28.1",
+]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra"
+filterwarnings = [
+    "ignore::DeprecationWarning:pkg_resources.*",
+]

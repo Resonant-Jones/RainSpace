@@ -1,0 +1,38 @@
+# Netlify deployment configuration for the Creator Distribution Platform demo.
+#
+# The frontend is a Vite SPA. The backend API is NOT deployed to Netlify in
+# CDP-001 - it runs locally via docker compose. The published site ships in
+# demo (fixtures) mode and never contains private media or creator records.
+#
+# Path resolution: every path in netlify.toml is resolved relative to the
+# base directory. With `base = "web"`, the publish directory "dist" means
+# "web/dist" - the Vite output. Writing "web/dist" here would point Netlify
+# at "web/web/dist", which does not exist.
+
+[build]
+  base = "web"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NPM_FLAGS = "--no-audit --no-fund"
+  # Demo mode: the bundle carries generic placeholder fixtures only.
+  # Switch to "api" only when a reachable, authorised API base URL exists.
+  VITE_DATA_MODE = "fixtures"
+
+# SPA fallback: direct navigation to a client route (e.g. /admin/content)
+# must serve index.html so React Router can resolve it.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+    X-Robots-Tag = "noindex"
