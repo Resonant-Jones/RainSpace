@@ -1,5 +1,8 @@
 import { useMemo, useState, type ChangeEvent } from 'react'
 
+import { DATA_MODE } from '../../config/env'
+import { useCreator } from '../../state/creatorContext'
+import { DraftPreviews } from './DraftPreviews'
 import { Notice } from '../../components/Notice'
 import { StatusChip, type ChipTone } from '../../components/StatusChip'
 import { consoleContent, type ConsoleContentItem, type ConsoleStatus } from '../../data/fixtures'
@@ -21,6 +24,7 @@ function statusTone(status: ConsoleStatus): ChipTone {
 }
 
 export function AdminContent() {
+  const { slug } = useCreator()
   const [statusFilter, setStatusFilter] = useState<ConsoleStatus | 'all'>('all')
   const [query, setQuery] = useState('')
   const [selectedSlug, setSelectedSlug] = useState<string | null>(
@@ -70,9 +74,9 @@ export function AdminContent() {
         </p>
       </header>
 
-      <Notice tone="warning" title="Demonstration only">
-        This view is driven by bundled sample rows. Edits, uploads and status
-        changes below are local to this browser session and are not persisted.
+      {DATA_MODE === 'api' && import.meta.env.DEV && <DraftPreviews key={slug} creatorSlug={slug} />}
+      <Notice tone="warning" title="Sample inventory · Demonstration only">
+        The inventory below uses sample rows. Title edits, uploads and editorial steps are simulated.
       </Notice>
 
       <section className="toolbar" aria-label="Content filters">

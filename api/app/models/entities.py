@@ -104,6 +104,7 @@ class ContentItem(Base):
     slug: Mapped[str] = mapped_column(String(128), nullable=False)
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved_preview_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     price_minor_units: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
     status: Mapped[PublicationStatus] = mapped_column(

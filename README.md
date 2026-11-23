@@ -4,11 +4,9 @@ Shared backend infrastructure for independent creators, with a creator-specific
 storefront on the creator's own domain. One catalogue service, many
 storefronts.
 
-> **Status: foundation scaffold (CDP-001).** This repository is a demonstrable
-> full-stack foundation, not a production marketplace. Nothing here is
-> production ready: there is no authentication, no payment processing, no
-> media ingestion and no real content. See
-> [Known limitations](#known-limitations) before relying on any part of it.
+> **Local demonstration.** Rainspace Editions has a PostgreSQL-backed catalogue,
+> an original public teaser and a local editor for draft preview attachments.
+> Fan accounts, checkout, uploads and publishing are simulated.
 
 ---
 
@@ -22,7 +20,7 @@ storefronts.
 | Versioned database migrations | `api/alembic/` | **Working.** Applied by `alembic upgrade head`. |
 | PostgreSQL + pgvector local stack | `docker-compose.yml` | **Working.** pgvector is installed by the migration. |
 | Storefront SPA | `web/` | **Working.** Runs standalone with no backend. |
-| Creator console | `web/src/pages/admin/` | **Demonstration.** Sample rows, local state only. |
+| Creator console | `web/src/pages/admin/` | **Local preview editor** saves draft attachments in PostgreSQL. Other inventory controls use sample data. |
 | Simulated fan login, purchase, library, messaging | `web/src/pages/` | **Simulated.** No accounts, no payments, no messages sent. |
 | Architecture decision record | `docs/architecture/adr/0001-platform-foundation.md` | **Written.** Describes the real boundaries. |
 
@@ -148,6 +146,42 @@ or pretends that an empty catalogue is a successful response.
 
 ---
 
+## Attach a public preview to a draft
+
+In the local API-backed storefront, open **Creator → Content → Draft release preview**
+(or go directly to `/admin/content#draft-previews`). Select a database draft and
+an approved sample, then choose **Attach preview**. Reload to read the attachment
+from PostgreSQL. Select **No preview → Remove preview** to detach it. A save only
+changes the attachment on the selected draft. The sample inventory below the
+editor runs separately.
+
+On a fresh checkout, enable the local editor once from the repo root. This adds
+a random operator capability to the ignored root `.env`. Keep the same value
+across restarts. Rotate it by replacing that entry and restarting both services.
+
+```sh
+(umask 077; touch .env; chmod 600 .env; rg -q '^DRAFT_PREVIEW_TOKEN=' .env || python3 -c 'import secrets; print("\nDRAFT_PREVIEW_TOKEN=" + secrets.token_hex(32))' >> .env)
+docker compose up -d --wait db
+docker compose build api
+docker compose run --rm --no-deps api alembic upgrade head
+docker compose up -d --no-deps api
+```
+
+Start Vite in API mode as above. The local dev server reads the root `API_PORT`
+and adds the capability to same-origin studio requests from the loopback
+interface. The browser bundle contains no operator secret. The API checks the
+capability, development environment, configured creator, draft status and
+approved preview ID. A stale edit returns a conflict and can be reloaded.
+People and processes with control of the local operator’s machine are trusted.
+Keep the dev server on loopback and outside tunnels and reverse proxies.
+Static builds provide the storefront and sample console.
+
+The approval list lives in `api/app/api/draft_previews.py`. Put approved
+public MP4 derivatives under `web/public/editions/`. The catalogue resolves
+the public file for a published release and the storefront serves its bytes.
+Drafts stay out of public reads. The local Compose database port binds to
+loopback.
+
 ## Validation
 
 Run these from the repository root.
@@ -221,7 +255,7 @@ throwaway schema created by running the real migrations. The suite proves:
 
 ## API reference
 
-All endpoints are public and read-only. There is no authentication.
+The catalogue endpoints below are public and read-only. The local studio uses a separate creator-scoped capability.
 
 | Method | Path | Behaviour |
 | --- | --- | --- |
@@ -229,6 +263,11 @@ All endpoints are public and read-only. There is no authentication.
 | `GET` | `/api/creators/{creator_slug}` | Public storefront profile: slug, display name, tagline, theme, created timestamp. `404` if unknown. |
 | `GET` | `/api/creators/{creator_slug}/catalog` | Published content for that creator only, newest first. `404` if the creator is unknown. |
 | `GET` | `/api/creators/{creator_slug}/catalog/{content_slug}` | One published item. `404` for unknown creators, unknown content, and unpublished content. |
+
+The catalogue also serves `GET /api/creators/{creator_slug}/catalog/{content_slug}/preview`
+for an approved public sample on a published release. The local studio lists drafts
+with `GET /api/creators/{creator_slug}/studio/draft-previews` and saves an attachment
+with `PUT` on that path followed by the draft slug.
 
 Interactive docs: <http://localhost:8000/docs>.
 
@@ -289,8 +328,7 @@ The frontend is a Vite SPA configured by `netlify.toml`: base `web`, build
 base directory, so `dist` under base `web` means `web/dist`), and an SPA
 fallback that serves `index.html` for direct navigation to a client route.
 
-The deployed site ships in **fixtures mode** and contains generic placeholder
-content only — no creator records, no media files, no secrets.
+The deployed site ships in **fixtures mode** and contains bundled demonstration records and approved public samples.
 
 ```bash
 npm ci --prefix web
@@ -321,10 +359,9 @@ explicit authorization.
 
 ## Known limitations
 
-1. **No authentication or authorisation.** Every endpoint is public. The
-   tenant-scoping tests prove that creator A's URL cannot reach creator B's
-   content; they do not prove any kind of identity enforcement, because
-   there is none.
+1. **No fan authentication.** The public catalogue is readable by anyone. The
+   public query scopes every release to its owning creator. The local studio
+   uses a separate capability for draft preview attachments.
 2. **No payment integration.** No processor is configured, deliberately. See
    the note below.
 3. **No media pipeline.** No upload, no FFmpeg, no transcoding, no
@@ -334,8 +371,7 @@ explicit authorization.
 4. **No publisher or scheduler.** Publication state is a column value. The
    console demonstrates the editorial flow and its approval gate; it does not
    schedule or publish anything.
-5. **No creator console backend.** The console reads bundled sample rows and
-   writes to local component state.
+5. **Creator console persistence.** Draft preview attachments persist in PostgreSQL. Other console edits use local component state.
 6. **No observability, no rate limiting, no backup procedure.** The health
    endpoint reports liveness only.
 7. **The embedding dimension (512) is provisional.**
@@ -363,7 +399,7 @@ foundation integrates nothing:
 Media privacy follows the same rule: originals are marked protected and are
 only ever meant to be served through an authorised, signed path. No original
 or paid media is exposed through public frontend assets or unprotected static
-URLs — in this build, no media is served at all.
+URLs — the demo serves approved public promotional samples.
 
 ---
 

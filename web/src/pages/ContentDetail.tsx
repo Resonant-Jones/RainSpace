@@ -1,32 +1,58 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { Artwork } from '../components/Artwork'
 import { Notice } from '../components/Notice'
 import { StatusChip } from '../components/StatusChip'
+import { API_BASE_URL, DATA_MODE } from '../config/env'
 import type { ContentSummary } from '../data'
 import { useContentData } from '../hooks/useContentData'
 import { formatDate, formatDuration, formatPrice } from '../lib/format'
 import { useCreator } from '../state/creatorContext'
 import { useDemoSession } from '../state/demoSessionContext'
 
-// A fixed public promo, independent of the session or access action. The
-// free listening study intentionally uses the audio track of the same edit.
+// The standalone fixture storefront uses the same public promo offline.
 const TEASER = '/editions/night-bus-teaser.mp4'
 
 function ReleasePreview({ item, creatorSlug }: { item: ContentSummary; creatorSlug: string }) {
   const [state, setState] = useState<'poster' | 'playing' | 'failed'>('poster')
-  const audioOnly = item.slug === 'field-recording-notes'
+  const audioOnly = creatorSlug === 'demo' && item.slug === 'field-recording-notes'
   const preview = item.media.find((asset) => asset.asset_type === 'preview' && asset.mime_type === 'video/mp4')
-  const available = creatorSlug === 'demo' && (audioOnly || item.slug === 'night-bus-short-film') && preview
+  const bundled = creatorSlug === 'demo' && (audioOnly || item.slug === 'night-bus-short-film')
+  const [resolved, setResolved] = useState<{ path: string | null; failed: boolean } | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  const endpoint = `${API_BASE_URL.replace(/\/$/, '')}/api/creators/${encodeURIComponent(creatorSlug)}/catalog/${encodeURIComponent(item.slug)}/preview`
+
+  useEffect(() => {
+    if (!preview || DATA_MODE !== 'api') return
+    const controller = new AbortController()
+    async function resolvePreview() {
+      try {
+        const result = await fetch(endpoint, { signal: controller.signal, cache: 'no-store' })
+        if (!result.ok && result.status !== 404) throw new Error('Preview lookup failed')
+        const path: unknown = result.ok ? (await result.json()).path : null
+        if (path !== null && (typeof path !== 'string' || !/^\/editions\/[a-zA-Z0-9_-]+\.mp4$/.test(path))) {
+          throw new Error('Unsupported public preview')
+        }
+        if (!controller.signal.aborted) setResolved({ path, failed: false })
+      } catch {
+        if (!controller.signal.aborted) setResolved({ path: null, failed: true })
+      }
+    }
+    void resolvePreview()
+    return () => controller.abort()
+  }, [endpoint, preview, attempt])
+
+  const source = DATA_MODE === 'api' ? resolved?.path : bundled ? TEASER : null
+  const available = preview && source
   const playing = available && state === 'playing'
   return (
     <div className="release-preview">
       {playing && !audioOnly ? (
-        <video controls autoPlay playsInline src={TEASER} aria-label="Night Bus public teaser" onError={() => setState('failed')} />
+        <video controls autoPlay playsInline src={source} aria-label={`${item.title} public teaser`} onError={() => setState('failed')} />
       ) : <Artwork seed={item.slug} label={item.title} />}
       {playing && audioOnly &&
-        <audio controls autoPlay src={TEASER} aria-label="Night Bus sound bed" onError={() => setState('failed')} />}
+        <audio controls autoPlay src={source} aria-label={`${item.title} sound bed`} onError={() => setState('failed')} />}
       {available && state === 'poster' &&
         <button className="play-preview" type="button" onClick={() => setState('playing')}>
           <span aria-hidden="true">▶</span> {audioOnly ? 'Listen to the study' : 'Play teaser'} · {formatDuration(preview.duration_seconds)}
@@ -36,7 +62,13 @@ function ReleasePreview({ item, creatorSlug }: { item: ContentSummary; creatorSl
           The preview could not be played. <button className="link-button" type="button" onClick={() => setState('playing')}>Try again</button>
         </div>
       )}
-      {!available && <p className="preview-message">A public preview is unavailable for this release.</p>}
+      {!available && (preview && DATA_MODE === 'api' && !resolved
+        ? <p className="preview-message" role="status">Loading preview…</p>
+        : resolved?.failed
+          ? <p className="preview-message" role="alert">The preview could not be loaded.{' '}
+              <button className="link-button" onClick={() => setAttempt(current => current + 1)}>Retry</button>
+            </p>
+          : <p className="preview-message">A public preview is unavailable for this release.</p>)}
     </div>
   )
 }

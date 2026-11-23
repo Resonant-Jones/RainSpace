@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.draft_previews import APPROVED
 from app.db.base import get_db
 from app.models.entities import (
     ContentItem,
@@ -49,9 +50,14 @@ def _get_creator_or_404(db: Session, creator_slug: str) -> Creator:
     return creator
 
 
-def _public_media(content: ContentItem) -> list[MediaAssetPublic]:
-    assets = [a for a in content.media_assets if a.asset_type in PUBLIC_ASSET_TYPES]
-    return [
+def _public_media(content: ContentItem, creator_slug: str) -> list[MediaAssetPublic]:
+    approved = APPROVED.get(creator_slug, {}).get(content.approved_preview_id)
+    assets = [
+        asset for asset in content.media_assets
+        if not asset.is_protected and asset.asset_type in PUBLIC_ASSET_TYPES
+        and not (approved and asset.asset_type == MediaAssetType.PREVIEW)
+    ]
+    media = [
         MediaAssetPublic(
             asset_type=asset.asset_type.value,
             mime_type=asset.mime_type,
@@ -63,10 +69,13 @@ def _public_media(content: ContentItem) -> list[MediaAssetPublic]:
         )
         for asset in assets
     ]
+    if approved:
+        media.append(MediaAssetPublic(asset_type="preview", mime_type="video/mp4", duration_seconds=approved.seconds))
+    return media
 
 
-def _to_summary(content: ContentItem) -> ContentSummaryPublic:
-    media = _public_media(content)
+def _to_summary(content: ContentItem, creator_slug: str) -> ContentSummaryPublic:
+    media = _public_media(content, creator_slug)
     durations = [m.duration_seconds for m in media if m.duration_seconds is not None]
     return ContentSummaryPublic(
         slug=content.slug,
@@ -105,7 +114,7 @@ def get_catalog(creator_slug: str, db: Session = Depends(get_db)) -> list[Conten
         .options(selectinload(ContentItem.media_assets))
         .order_by(ContentItem.published_at.desc().nullslast(), ContentItem.created_at.desc())
     )
-    return [_to_summary(content) for content in db.scalars(stmt)]
+    return [_to_summary(content, creator_slug) for content in db.scalars(stmt)]
 
 
 @router.get(
@@ -134,5 +143,28 @@ def get_content(
             status_code=status.HTTP_404_NOT_FOUND, detail="content not found"
         )
 
-    summary = _to_summary(content)
+    summary = _to_summary(content, creator_slug)
     return ContentDetailPublic(**summary.model_dump())
+
+
+@router.get("/{creator_slug}/catalog/{content_slug}/preview")
+def get_public_preview(creator_slug: str, content_slug: str, db: Session = Depends(get_db)):
+    item = db.scalar(
+        select(ContentItem).join(Creator).where(
+            Creator.slug == creator_slug,
+            ContentItem.slug == content_slug,
+            ContentItem.status == PublicationStatus.PUBLISHED,
+        )
+    )
+    approved = APPROVED.get(creator_slug, {}).get(item.approved_preview_id) if item else None
+    # The original seeded releases predate the attachment column.
+    if item and item.approved_preview_id is None and item.slug in {"night-bus-short-film", "field-recording-notes"}:
+        has_public_sample = any(
+            asset.asset_type == MediaAssetType.PREVIEW and not asset.is_protected
+            for asset in item.media_assets
+        )
+        if has_public_sample:
+            approved = APPROVED.get(creator_slug, {}).get("night-bus-teaser")
+    if not approved:
+        raise HTTPException(404, "Preview unavailable")
+    return approved.choice()
