@@ -4,173 +4,124 @@ import { Link, useParams } from 'react-router-dom'
 import { Artwork } from '../components/Artwork'
 import { Notice } from '../components/Notice'
 import { StatusChip } from '../components/StatusChip'
+import type { ContentSummary } from '../data'
 import { useContentData } from '../hooks/useContentData'
 import { formatDate, formatDuration, formatPrice } from '../lib/format'
 import { useCreator } from '../state/creatorContext'
 import { useDemoSession } from '../state/demoSessionContext'
 
+// A fixed public promo, independent of the session or access action. The
+// free listening study intentionally uses the audio track of the same edit.
+const TEASER = '/editions/night-bus-teaser.mp4'
+
+function ReleasePreview({ item, creatorSlug }: { item: ContentSummary; creatorSlug: string }) {
+  const [state, setState] = useState<'poster' | 'playing' | 'failed'>('poster')
+  const audioOnly = item.slug === 'field-recording-notes'
+  const preview = item.media.find((asset) => asset.asset_type === 'preview' && asset.mime_type === 'video/mp4')
+  const available = creatorSlug === 'demo' && (audioOnly || item.slug === 'night-bus-short-film') && preview
+  const playing = available && state === 'playing'
+  return (
+    <div className="release-preview">
+      {playing && !audioOnly ? (
+        <video controls autoPlay playsInline src={TEASER} aria-label="Night Bus public teaser" onError={() => setState('failed')} />
+      ) : <Artwork seed={item.slug} label={item.title} />}
+      {playing && audioOnly &&
+        <audio controls autoPlay src={TEASER} aria-label="Night Bus sound bed" onError={() => setState('failed')} />}
+      {available && state === 'poster' &&
+        <button className="play-preview" type="button" onClick={() => setState('playing')}>
+          <span aria-hidden="true">▶</span> {audioOnly ? 'Listen to the study' : 'Play teaser'} · {formatDuration(preview.duration_seconds)}
+        </button>}
+      {available && state === 'failed' && (
+        <div className="preview-message" role="alert">
+          The preview could not be played. <button className="link-button" type="button" onClick={() => setState('playing')}>Try again</button>
+        </div>
+      )}
+      {!available && <p className="preview-message">A public preview is unavailable for this release.</p>}
+    </div>
+  )
+}
+
 export function ContentDetail() {
   const { slug: creatorSlug } = useCreator()
   const { slug: contentSlug = '' } = useParams()
   const session = useDemoSession()
-
   const { item, loading, error } = useContentData(creatorSlug, contentSlug)
-
-  // The confirmation panel belongs to the slug it was opened for, so it
-  // resets itself when the visitor moves to another item.
   const [confirmingSlug, setConfirmingSlug] = useState<string | null>(null)
-  const confirming = confirmingSlug === contentSlug
 
-  const owned = item ? session.hasPurchased(item.slug) : false
-  const isFree = item ? item.price_minor_units === 0 : false
-
-  if (loading) {
-    return (
-      <div className="page">
-        <p className="muted">Loading content…</p>
-      </div>
-    )
-  }
-
+  if (loading) return <div className="page"><p role="status">Loading release…</p></div>
   if (error || !item) {
     return (
       <div className="page">
-        <header className="page-head">
-          <h1>Content unavailable</h1>
-        </header>
-        <Notice tone="error" title="Not found">
-          {error ?? 'This content is not published.'}
-        </Notice>
-        <Link to="/videos" className="button">
-          Back to the catalogue
-        </Link>
+        <h1>Content unavailable</h1>
+        <Notice tone="error" title="Release unavailable">This edition could not be loaded. Check the catalogue for current releases.</Notice>
+        <Link to="/videos" className="link">Back to the catalogue →</Link>
       </div>
     )
   }
 
-  const preview = item.media.find((asset) => asset.asset_type === 'preview')
-
+  const isFree = item.price_minor_units === 0
+  const price = formatPrice(item.price_minor_units, item.currency)
+  const addToLibrary = () => {
+    session.purchase(item.slug)
+    setConfirmingSlug(null)
+  }
   return (
-    <div className="page">
-      <nav className="breadcrumb" aria-label="Breadcrumb">
-        <Link to="/videos">Catalogue</Link>
-        <span aria-hidden="true">/</span>
-        <span>{item.title}</span>
-      </nav>
-
+    <div className="page release-page">
+      <nav className="breadcrumb" aria-label="Breadcrumb"><Link to="/videos">← Catalogue</Link></nav>
+      <header className="release-heading">
+        <h1>{item.title}</h1>
+        <p className="release-date">Released {formatDate(item.published_at)}</p>
+      </header>
       <div className="detail-layout">
         <div className="detail-main">
-          <Artwork seed={item.slug} label={item.title} />
-          <h1>{item.title}</h1>
-          {item.description ? (
-            <p className="lede">{item.description}</p>
-          ) : null}
-
-          <dl className="detail-facts">
-            <div>
-              <dt>Published</dt>
-              <dd>{formatDate(item.published_at)}</dd>
-            </div>
-            <div>
-              <dt>Preview</dt>
-              <dd>
-                {preview ? formatDuration(preview.duration_seconds) : 'Not available'}
-              </dd>
-            </div>
-            <div>
-              <dt>Access</dt>
-              <dd>
-                {isFree ? 'Free preview' : 'Paid preview — simulated purchase'}
-              </dd>
-            </div>
-          </dl>
-
-          <Notice tone="info" title="Where the media lives">
-            Original media is stored privately behind a signed access path. This
-            storefront only ever renders locally generated placeholder artwork,
-            so no paid or original file is served from this site.
-          </Notice>
+          <ReleasePreview key={`${creatorSlug}/${item.slug}`} item={item} creatorSlug={creatorSlug} />
+          {item.description?.split('\n\n').map((paragraph, index) => (
+            <p key={index} className={index === 0 ? 'lede' : undefined}>{paragraph}</p>
+          ))}
         </div>
-
-        <aside className="detail-side">
-          <div className="price-block">
-            <span className="price price-large">
-              {formatPrice(item.price_minor_units, item.currency)}
-            </span>
-            {item.price_minor_units > 0 ? (
-              <span className="muted">Minor units: {item.price_minor_units}</span>
-            ) : null}
-          </div>
-
-          {owned ? (
+        <aside className="detail-side" aria-label="Library access">
+          <p className="eyebrow">Library access</p>
+          <strong className="price price-large">{price}</strong>
+          {session.hasPurchased(item.slug) ? (
             <>
               <StatusChip tone="demo" label="In your library (simulated)" />
-              <p className="muted">
-                This is a demonstration entry. No payment was taken and no
-                entitlement exists.
-              </p>
-              <Link to="/library" className="button">
-                Open the library
-              </Link>
+              <p className="muted">Saved to this browser’s demo library. Only the public samples are playable.</p>
+              <Link to="/library" className="button">Open the library</Link>
             </>
           ) : !session.loggedIn ? (
             <>
-              <Notice tone="info" title="Sign in to continue">
-                The demonstration sign-in asks for a display name only. No
-                password, card details or personal information is collected.
-              </Notice>
-              <Link to="/login" className="button">
-                Sign in (demo)
-              </Link>
+              <p>Choose a display name to try the demo library. This sign-in stays in your browser.</p>
+              <form className="stack" onSubmit={(event) => {
+                event.preventDefault()
+                const name = new FormData(event.currentTarget).get('displayName')
+                session.login(typeof name === 'string' ? name : '')
+              }}>
+                <label htmlFor="release-display-name">Display name</label>
+                <input id="release-display-name" name="displayName" placeholder="Demo Fan" autoComplete="off" />
+                <button type="submit" className="button">Sign in (demo)</button>
+              </form>
+              <p className="muted">Checkout is simulated. No money changes hands.</p>
             </>
-          ) : confirming ? (
+          ) : confirmingSlug === contentSlug ? (
             <div className="confirm-panel">
-              <p>
-                Confirm a <strong>simulated</strong> purchase of{' '}
-                <strong>
-                  {formatPrice(item.price_minor_units, item.currency)}
-                </strong>
-                .
-              </p>
-              <p className="muted">
-                No payment provider is contacted and no card details are
-                requested. The item is added to a local demonstration library.
-              </p>
+              <strong>Confirm demo purchase · {price}</strong>
+              <p>This adds the release to this browser’s library. No payment is taken or private media unlocked.</p>
               <div className="button-row">
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => {
-                    session.purchase(item.slug)
-                    setConfirmingSlug(null)
-                  }}
-                >
+                <button type="button" className="button" onClick={addToLibrary}>
                   Confirm simulated purchase
                 </button>
-                <button
-                  type="button"
-                  className="button button-ghost"
-                  onClick={() => setConfirmingSlug(null)}
-                >
-                  Cancel
-                </button>
+                <button type="button" className="button button-ghost" onClick={() => setConfirmingSlug(null)}>Cancel</button>
               </div>
             </div>
           ) : (
             <>
-              <p className="muted">
-                {isFree
-                  ? 'Free preview — add it to the demonstration library.'
-                  : 'Paid preview — the purchase step below is simulated.'}
-              </p>
+              <p className="muted">Save this release to your local demonstration library. Access is simulated.</p>
               <button
                 type="button"
                 className="button"
-                onClick={() => setConfirmingSlug(contentSlug)}
+                onClick={isFree ? addToLibrary : () => setConfirmingSlug(contentSlug)}
               >
-                {isFree
-                  ? 'Add to library (demo)'
-                  : 'Simulate purchase — no payment is taken'}
+                {isFree ? 'Add to library (demo)' : 'Simulate purchase — no payment is taken'}
               </button>
             </>
           )}

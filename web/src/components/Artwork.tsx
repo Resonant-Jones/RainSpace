@@ -1,30 +1,19 @@
-import { hashString } from '../lib/format'
+import { useCreator } from '../state/creatorContext'
 
-/**
- * Locally generated placeholder artwork.
- *
- * The storefront never loads a creator's real image or video file. The
- * gradient is derived from the content slug, so a card always looks the same
- * for the same item without shipping any asset.
- */
+// Only public promotional stills are bundled. The contact sheet contains
+// three original generated photographs, ordered film, keyboard, microphone.
+const plates = new Map([
+  ['night-bus-short-film', { position: 'top', label: 'A city bus idles on a rain-dark street' }],
+  ['keyboard-mechanics', { position: 'center', label: 'Ivory synthesizer keys under a tungsten lamp' }],
+  ['field-recording-notes', { position: 'bottom', label: 'A field microphone beside a misty river' }],
+])
+
 export function Artwork({ seed, label }: { seed: string; label?: string }) {
-  const hash = hashString(seed)
-  const hue = hash % 360
-  const secondHue = (hue + 45) % 360
-  const angle = (hash >> 9) % 360
-
+  const { slug } = useCreator()
+  const plate = slug === 'demo' ? plates.get(seed) : undefined
   return (
-    <div
-      className="artwork"
-      role="img"
-      aria-label={label ? `${label} placeholder artwork` : 'Placeholder artwork'}
-      style={{
-        backgroundImage: `linear-gradient(${angle}deg, hsl(${hue} 55% 30%), hsl(${secondHue} 45% 16%))`,
-      }}
-    >
-      <span className="artwork-note" aria-hidden="true">
-        placeholder artwork
-      </span>
+    <div className="artwork" role="img" aria-label={plate?.label ?? `Cover unavailable for ${label ?? 'this release'}`}>
+      {plate && <span className="artwork-plate" style={{ backgroundPositionY: plate.position }} />}
     </div>
   )
 }

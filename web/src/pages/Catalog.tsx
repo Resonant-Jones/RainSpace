@@ -65,8 +65,7 @@ export function Catalog() {
       <header className="page-head">
         <h1>Catalogue</h1>
         <p className="lede">
-          Published content for this creator. Only published items are ever
-          listed here.
+          Explore the films, lessons and listening notes in the studio collection.
         </p>
       </header>
 
@@ -125,22 +124,33 @@ export function Catalog() {
         </div>
       </section>
 
-      <p className="muted result-count" aria-live="polite">
+      {!loading && !error && <p className="muted result-count" aria-live="polite">
         Showing {visible.length} of {items.length} published{' '}
         {items.length === 1 ? 'item' : 'items'}
-      </p>
+      </p>}
 
       {loading ? <p className="muted">Loading the catalogue…</p> : null}
 
       {error ? (
         <Notice tone="error" title="Catalogue unavailable">
-          {error}
+          The studio collection could not be loaded. Please try again shortly.
         </Notice>
       ) : null}
 
       {!loading && !error && visible.length === 0 ? (
-        <Notice tone="info" title="Nothing matches those filters">
-          Adjust the search text or the price filter to see published content.
+        <Notice tone="info" title={items.length ? 'Nothing matches those filters' : 'No releases yet'}>
+          {items.length ? (
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                setQuery('')
+                setPriceFilter('all')
+              }}
+            >
+              Clear search and price filters
+            </button>
+          ) : 'New editions will appear here when they are published.'}
         </Notice>
       ) : null}
 

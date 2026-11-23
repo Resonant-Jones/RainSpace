@@ -1,28 +1,19 @@
 import type { ContentSummary, Creator } from './types'
 
-/**
- * Bundled demo data.
- *
- * Everything here is placeholder content. It mirrors the shape of the seeded
- * PostgreSQL rows so that `fixtures` mode and `api` mode show the same
- * catalogue, but no row in this file refers to a real creator, a real fan or
- * a real media file.
- *
- * The artwork rendered by the storefront is generated locally from a slug
- * hash. No image, video or audio file is bundled or fetched.
+/** Offline catalogue for the generic demo creator. The release descriptions
+ * and public preview metadata mirror the Rainspace Editions demo seed.
  */
-
 export const demoCreator: Creator = {
   slug: 'demo',
   display_name: 'Demo Creator',
-  tagline: 'Placeholder storefront for the platform demonstration.',
+  tagline: 'Independent films, sound studies and lessons from the scoring room.',
   theme: {
-    primary: '#14141c',
-    accent: '#7c5cff',
-    background: '#0b0b0f',
-    surface: '#17171f',
-    text: '#f4f4f6',
-    muted: '#9b9bab',
+    primary: '#20221f',
+    accent: '#efab79',
+    background: '#111310',
+    surface: '#1b1d1a',
+    text: '#f5f1e7',
+    muted: '#b6b7aa',
   },
   created_at: '2026-01-05T09:00:00Z',
 }
@@ -36,7 +27,7 @@ const cover = () => ({
 const preview = () => ({
   asset_type: 'preview',
   mime_type: 'video/mp4',
-  duration_seconds: 30,
+  duration_seconds: 18,
 })
 
 export const publishedContent: ContentSummary[] = [
@@ -44,33 +35,33 @@ export const publishedContent: ContentSummary[] = [
     slug: 'field-recording-notes',
     title: 'Field Recording Notes',
     description:
-      'A short walk-and-talk session about capturing location sound. Placeholder content for the platform demonstration.',
+      'Listen to the sound bed from Night Bus on its own. Follow the low motor tone beneath the rain, then listen for the two-note stop bell as the street falls quiet.',
     price_minor_units: 0,
     currency: 'USD',
     published_at: '2026-01-14T17:00:00Z',
-    duration_seconds: 30,
+    duration_seconds: 18,
     media: [cover(), preview()],
   },
   {
     slug: 'keyboard-mechanics',
     title: "Keyboard Mechanics: A Beginner's Path",
     description:
-      'An instructional series entry covering the fundamentals. Placeholder content for the platform demonstration.',
+      'Build a cue for a night scene in three lessons. Start with a two-note motif, shape a soft attack, then leave space in the arrangement for the sound of the street.\n\nTry the opening exercise. Hold a low D for four beats. On the next bar, play A only on beat three. Repeat once with a slower attack and listen to how the same two notes move from the foreground into the room.',
     price_minor_units: 900,
     currency: 'USD',
     published_at: '2026-02-03T12:30:00Z',
-    duration_seconds: 30,
-    media: [cover(), preview()],
+    duration_seconds: null,
+    media: [cover()],
   },
   {
     slug: 'night-bus-short-film',
     title: 'Night Bus: A Short Film',
     description:
-      'A short film entry with a paid tier. Placeholder content for the platform demonstration.',
+      'The last bus waits under sodium lights. A study of rain on asphalt, the glow of an empty cabin and the small sounds that carry a city through the night.',
     price_minor_units: 1400,
     currency: 'USD',
     published_at: '2026-03-22T20:15:00Z',
-    duration_seconds: 30,
+    duration_seconds: 18,
     media: [cover(), preview()],
   },
 ]

@@ -1,26 +1,15 @@
 import { dataSource } from '../data'
 
-/**
- * The persistent demonstration indicator.
- *
- * It is rendered on every route and states plainly which behaviours are
- * simulated and where the page data came from. Removing it would break the
- * rule that a simulated feature must never look like a real one.
- */
 export function DemoBanner() {
-  const modeLabel =
-    dataSource.mode === 'api'
-      ? 'Data: live API'
-      : 'Data: bundled demo fixtures'
-
   return (
-    <div className="demo-banner" role="status" data-testid="demo-banner">
-      <strong>Demo mode</strong>
-      <span>
-        Accounts, purchases, messages and creator-console processing states are
-        simulated. No real payments, accounts or media exist.
-      </span>
-      <span className="demo-banner-mode">{modeLabel}</span>
-    </div>
+    <details className="demo-banner" data-testid="demo-banner">
+      <summary>Demo mode</summary>
+      <div className="demo-info">
+        <strong>About this storefront</strong>
+        <p>Sign-in, checkout, messages and creator operations are simulated. No real payments, accounts or media entitlements are created.</p>
+        <p>Rainspace Editions is a fictional studio. Its cover stills were generated for this demo. The public film teaser and its listening study use an original synthesized soundtrack.</p>
+        <small>{dataSource.mode === 'api' ? 'Catalogue source · Live API' : 'Catalogue source · Bundled demo fixtures'}</small>
+      </div>
+    </details>
   )
 }

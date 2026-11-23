@@ -4,9 +4,9 @@ Run with:
 
     python -m app.seed_demo
 
-Everything this module writes is placeholder data: generic titles, generic
-copy, and storage keys that point at nothing. No real media, no real customer
-data, no creator records of any actual person.
+Rainspace Editions is a fictional film and sound imprint. Its public teaser
+combines original generated artwork with a synthesized score. Private media
+keys are illustrative. No customer or transaction data is created.
 
 The operation is idempotent. Running it repeatedly converges on the same
 state - it updates existing rows instead of duplicating them - so it can be
@@ -32,12 +32,12 @@ from app.models.entities import (
 )
 
 DEMO_THEME = {
-    "primary": "#14141c",
-    "accent": "#7c5cff",
-    "background": "#0b0b0f",
-    "surface": "#17171f",
-    "text": "#f4f4f6",
-    "muted": "#9b9bab",
+    "primary": "#20221f",
+    "accent": "#efab79",
+    "background": "#111310",
+    "surface": "#1b1d1a",
+    "text": "#f5f1e7",
+    "muted": "#b6b7aa",
 }
 
 # Fixed past timestamps keep the seeded catalog deterministic between runs.
@@ -46,13 +46,15 @@ _PUBLISHED = [
         "slug": "field-recording-notes",
         "title": "Field Recording Notes",
         "description": (
-            "A short walk-and-talk session about capturing location sound. "
-            "Placeholder content for the platform demonstration."
+            "Listen to the sound bed from Night Bus on its own. Follow the low motor tone "
+            "beneath the rain, then listen for the two-note stop bell as the street falls "
+            "quiet."
         ),
         "price_minor_units": 0,
         "status": PublicationStatus.PUBLISHED,
         "published_at": datetime(2026, 1, 14, 17, 0, tzinfo=timezone.utc),
         "duration_seconds": 812.0,
+        "preview_seconds": 18.0,
         "transcript": {
             "raw_text": (
                 "Placeholder transcript for the demo catalogue entry. It exists so the "
@@ -65,8 +67,12 @@ _PUBLISHED = [
         "slug": "keyboard-mechanics",
         "title": "Keyboard Mechanics: A Beginner's Path",
         "description": (
-            "An instructional series entry covering the fundamentals. "
-            "Placeholder content for the platform demonstration."
+            "Build a cue for a night scene in three lessons. Start with a two-note motif, "
+            "shape a soft attack, then leave space in the arrangement for the sound of the "
+            "street.\n\n"
+            "Try the opening exercise. Hold a low D for four beats. On the next bar, "
+            "play A only on beat three. Repeat once with a slower attack and listen "
+            "to how the same two notes move from the foreground into the room."
         ),
         "price_minor_units": 900,
         "status": PublicationStatus.PUBLISHED,
@@ -81,13 +87,14 @@ _PUBLISHED = [
         "slug": "night-bus-short-film",
         "title": "Night Bus: A Short Film",
         "description": (
-            "A short film entry with a paid tier. "
-            "Placeholder content for the platform demonstration."
+            "The last bus waits under sodium lights. A study of rain on asphalt, the glow of "
+            "an empty cabin and the small sounds that carry a city through the night."
         ),
         "price_minor_units": 1400,
         "status": PublicationStatus.PUBLISHED,
         "published_at": datetime(2026, 3, 22, 20, 15, tzinfo=timezone.utc),
         "duration_seconds": 1563.0,
+        "preview_seconds": 18.0,
         "transcript": {
             "raw_text": "Placeholder transcript for the demo catalogue entry.",
             "summary": "Placeholder summary for a demo short film entry.",
@@ -120,6 +127,7 @@ _SCHEDULED = {
     "status": PublicationStatus.SCHEDULED,
     "published_at": None,  # resolved relative to now so it stays in the future
     "duration_seconds": 640.0,
+    "preview_seconds": 30.0,
     "transcript": None,
 }
 
@@ -200,7 +208,7 @@ def _seed_content_item(db: Session, creator: Creator, spec: dict) -> None:
     content = _upsert_content(db, creator, spec)
 
     duration = spec.get("duration_seconds")
-    prefix = f"demo/placeholders/{content.slug}"
+    prefix = f"{creator.slug}/placeholders/{content.slug}"
 
     _upsert_media(
         db,
@@ -219,17 +227,6 @@ def _seed_content_item(db: Session, creator: Creator, spec: dict) -> None:
             db,
             content,
             {
-                "object_key": f"{prefix}/preview.mp4",
-                "asset_type": MediaAssetType.PREVIEW,
-                "mime_type": "video/mp4",
-                "duration_seconds": 30.0,
-                "is_protected": False,
-            },
-        )
-        _upsert_media(
-            db,
-            content,
-            {
                 "object_key": f"{prefix}/original.mp4",
                 "asset_type": MediaAssetType.FULL,
                 "mime_type": "video/mp4",
@@ -237,6 +234,33 @@ def _seed_content_item(db: Session, creator: Creator, spec: dict) -> None:
                 "is_protected": True,
             },
         )
+
+    # The film and its listening notes share one public teaser. Retire only
+    # the old seed's synthetic preview row on editions without a sample.
+    preview_key = f"{prefix}/preview.mp4"
+    if spec.get("preview_seconds") is not None:
+        _upsert_media(
+            db,
+            content,
+            {
+                "object_key": preview_key,
+                "asset_type": MediaAssetType.PREVIEW,
+                "mime_type": "video/mp4",
+                "duration_seconds": spec["preview_seconds"],
+                "is_protected": False,
+            },
+        )
+    elif spec["slug"] == "keyboard-mechanics":
+        previous = db.scalar(
+            select(MediaAsset).where(
+                MediaAsset.content_item_id == content.id,
+                MediaAsset.storage_object_key == preview_key,
+                MediaAsset.asset_type == MediaAssetType.PREVIEW,
+                MediaAsset.is_protected.is_(False),
+            )
+        )
+        if previous is not None:
+            db.delete(previous)
 
     _upsert_transcript(db, content, spec.get("transcript"))
 
@@ -246,8 +270,8 @@ def seed(db: Session, creator_slug: str) -> dict:
     creator = _upsert_creator(
         db,
         creator_slug,
-        display_name="Demo Creator",
-        tagline="Placeholder storefront for the platform demonstration.",
+        display_name="Rainspace Editions",
+        tagline="Independent films, sound studies and lessons from the scoring room.",
     )
 
     scheduled = dict(_SCHEDULED)
@@ -286,7 +310,7 @@ def main() -> None:
     print("Demo seed complete.")
     print(f"  creator slug : {result['creator']}")
     print(f"  content items: {result['total']}")
-    print("  All content is placeholder data. No real media was written.")
+    print("  Installed the demonstration catalogue. Public previews ship with the storefront.")
 
 
 if __name__ == "__main__":
