@@ -136,35 +136,17 @@ p {
 .session-area { gap: .65rem; }
 .user-name { max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .85rem; }
 .menu-toggle { display: none; }
-.demo-banner { position: relative; }
-.demo-banner summary {
-  cursor: pointer;
-  list-style: none;
-  color: var(--color-muted);
-  font: .7rem/1.4 var(--mono);
-  padding: .45rem .55rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  white-space: nowrap;
+.demo-banner {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .85rem;
+  padding: .55rem max(1rem, calc((100% - 1240px) / 2));
+  border-top: 1px solid var(--border); background: var(--color-surface);
+  color: var(--color-text); font-size: .84rem; line-height: 1.45;
 }
-.demo-banner summary::-webkit-details-marker { display: none; }
-.demo-banner summary::before { content: '•'; color: var(--color-accent); margin-right: .3rem; }
-.demo-info {
-  position: absolute;
-  z-index: 10;
-  top: calc(100% + .5rem);
-  left: 0;
-  width: min(330px, 85vw);
-  padding: 1.15rem;
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  font-size: .9rem;
-}
-.demo-info p { margin: .55rem 0; }
-.demo-info small { color: var(--color-muted); }
+.demo-banner strong { color: var(--color-accent); }
+.demo-banner small { font-size: inherit; color: var(--color-muted); }
+.demo-banner summary { cursor: pointer; }
+.demo-banner details[open] { flex-basis: 100%; }
+.demo-banner details p { max-width: 70ch; margin: .4rem 0; }
 
 /* --- layout --------------------------------------------------------------- */
 
@@ -520,7 +502,6 @@ select:focus {
   min-width: 100%;
   aspect-ratio: 3;
   transform: translateX(-50%);
-  background-image: url('/editions/contact-sheet.jpg');
   background-repeat: no-repeat;
   background-size: 100% 300%;
 }
@@ -1043,14 +1024,12 @@ select:focus {
   .site-header-inner {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
   .navigation.is-open { grid-column: 1 / -1; }
   .brand-name { font-size: .97rem; }
   .brand-name { overflow-wrap: anywhere; }
   .brand-mark { width: 26px; height: 26px; }
-  .demo-banner { position: static; }
-  .demo-info { top: 100%; width: 100%; }
   .feature { flex-direction: column; align-items: stretch; min-height: 0; }
   .feature > .artwork { position: relative; height: auto; aspect-ratio: 2.15; }
   .feature::before { display: none; }
@@ -1072,7 +1051,6 @@ select:focus {
   .site-header-inner { gap: .45rem; }
   .brand-link { gap: .4rem; }
   .menu-toggle span { display: none; }
-  .demo-banner summary { padding-inline: .35rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

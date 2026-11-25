@@ -1,7 +1,7 @@
 # Backend container for the Creator Distribution Platform API.
 #
-# The image runs the public read-only catalog API only. It contains no media
-# files, no credentials and no payment integration.
+# The API image includes the reviewed promotional derivative for gated playback.
+# Originals and credentials do not belong in the build context.
 #
 # Dependencies are installed from the pinned [project] table in
 # pyproject.toml - that file is the single source of truth for versions. The

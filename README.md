@@ -4,9 +4,12 @@ Shared backend infrastructure for independent creators, with a creator-specific
 storefront on the creator's own domain. One catalogue service, many
 storefronts.
 
-> **Local demonstration.** Rainspace Editions has a PostgreSQL-backed catalogue,
-> an original public teaser and a local editor for draft preview attachments.
-> Fan accounts, checkout, uploads and publishing are simulated.
+> **Status · Non-production creator platform demo (CDP-002).** The catalogue,
+> draft preview attachment and approved sample playback work against PostgreSQL.
+> Fan sign-in, checkout, messages and console workflows are simulations.
+> Fan authentication, creator accounts and roles, payments, media ingestion and
+> publishing are unimplemented. The local operator capability is real.
+
 
 ---
 
@@ -36,7 +39,7 @@ inbox, every creator-console figure, the upload interaction, and the
 editorial status transitions. Each one is marked as simulated *at the point
 of use*, and a persistent banner names the active data mode on every route.
 
-**Not implemented at all:** authentication, payment processing, video upload,
+**Not implemented at all:** user authentication, payment processing, video upload,
 transcoding, transcription, caption generation, embedding generation,
 scheduled publishing, blog publishing, email, and third-party distribution
 integrations. Each of these needs its own bounded task spec.
@@ -132,7 +135,13 @@ npm run dev          # http://localhost:5173
 ```
 
 The storefront works with **no backend running**. It ships with bundled
-sample fixtures by default.
+sample fixtures by default. This version names the storefront **Demo Creator**
+and contains three illustrative published records, cover artwork and a sample
+console. The API seed names the fictional studio **Rainspace Editions** and
+installs three published releases, one draft, one scheduled item and a reviewed
+18-second film teaser shared by the film and listening study. Fixtures give a
+client a browsable offline tour. Live playback and persistent attachment editing
+require the API. Browser-local fan actions remain simulated in both modes.
 
 ### 3. Point the frontend at the live API (optional)
 
@@ -176,11 +185,35 @@ People and processes with control of the local operator’s machine are trusted.
 Keep the dev server on loopback and outside tunnels and reverse proxies.
 Static builds provide the storefront and sample console.
 
-The approval list lives in `api/app/api/draft_previews.py`. Put approved
-public MP4 derivatives under `web/public/editions/`. The catalogue resolves
-the public file for a published release and the storefront serves its bytes.
-Drafts stay out of public reads. The local Compose database port binds to
-loopback.
+Reviewed bytes and their SHA-256 registry live under `api/app/api/derivatives/`.
+Only the API image includes the MP4. A creator must own an unprotected MP4
+preview source with the reviewed digest. Attaching selects the sample for that
+release. Publishing remains an out-of-band operator action. An eligible
+published release's metadata and byte path are checked on every request.
+
+**Withdraw the teaser for this creator.** From the repository root, a trusted
+operator can run this transaction against the pilot database. Change the
+creator slug deliberately if using a differently named seed. The returned count
+and IDs describe the affected sources. A repeat after withdrawal updates zero rows.
+
+```sh
+docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+UPDATE media_assets AS a SET is_protected = true
+FROM content_items AS i JOIN creators AS c ON c.id = i.creator_id
+WHERE a.content_item_id = i.id AND c.slug = 'demo'
+  AND a.asset_type = 'preview' AND a.is_protected = false
+  AND a.checksum_sha256 = '94e44e7661af0180c654859fe8bebd8caf09865c12c241e354047f33f4dec7a1'
+RETURNING a.id;
+SQL
+```
+
+A committed withdrawal stops new metadata and byte reads, including direct and
+Range requests, without restarting a service. Existing downloads, in-flight
+streams and previously shared static builds remain outside its reach. The teaser
+is also in this public repository’s Git history. That independent copy remains
+downloadable after platform withdrawal. Only publicity-cleared material belongs here. Reseeding
+preserves withdrawals. Removing an attachment in the console affects only its
+draft. Review source rights again before explicitly restoring a protected grant.
 
 ## Validation
 
@@ -216,8 +249,11 @@ npm run test:e2e --prefix web
 git diff --check
 ```
 
-The Playwright suite builds the production bundle and serves it with
-`vite preview`, so it verifies the same artefact Netlify would serve. If the
+The Playwright suite covers the fixture production build and a separate
+API-mode production build served on loopback. Start the migrated Compose stack
+first. The latter suite creates a throwaway schema and API container, drives
+the real studio proxy and player, and removes the test resources. Its operator
+transitions run directly in the disposable database. If the
 browser binaries cannot be downloaded in your environment, `npm run test:e2e`
 fails with the browser-install error; that is an environment failure, and a
 successful `npm run build` is **not** a substitute for it.
@@ -265,9 +301,11 @@ The catalogue endpoints below are public and read-only. The local studio uses a 
 | `GET` | `/api/creators/{creator_slug}/catalog/{content_slug}` | One published item. `404` for unknown creators, unknown content, and unpublished content. |
 
 The catalogue also serves `GET /api/creators/{creator_slug}/catalog/{content_slug}/preview`
-for an approved public sample on a published release. The local studio lists drafts
+for an approved public sample on a published release. Its returned path ends in
+`/preview/bytes` and supports MP4 range requests. The local studio lists drafts
 with `GET /api/creators/{creator_slug}/studio/draft-previews` and saves an attachment
-with `PUT` on that path followed by the draft slug.
+with `PUT` on that path followed by the draft slug. A studio `GET` on that same
+draft path auditions the saved sample with the same operator capability.
 
 Interactive docs: <http://localhost:8000/docs>.
 
@@ -328,32 +366,24 @@ The frontend is a Vite SPA configured by `netlify.toml`: base `web`, build
 base directory, so `dist` under base `web` means `web/dist`), and an SPA
 fallback that serves `index.html` for direct navigation to a client route.
 
-The deployed site ships in **fixtures mode** and contains bundled demonstration records and approved public samples.
+The default Netlify build uses **fixtures**. It includes public cover art and
+sample records. It omits the teaser bytes and the local editor. For a client
+tour, build the demo and create a draft deployment in an authorised demo project.
 
-```bash
+```sh
 npm ci --prefix web
-npm run build --prefix web          # produces web/dist
+npm run build --prefix web
+netlify deploy --dir=web/dist
 ```
 
-To publish:
-
-```bash
-npm install -g netlify-cli
-netlify deploy --dir=web/dist --prod
-```
-
-or connect the repository in the Netlify UI (build settings are read from
-`netlify.toml`).
-
-**Deployment status for this task:** the build artefacts are produced and
-verified locally, but no live Netlify site was created — no Netlify CLI was
-installed and no authentication token was available in the build
-environment. A hosted URL is therefore **unverified** and is deliberately not
-claimed here. To publish, install the CLI, authenticate, and run the command
-above; then verify the hosted pages through the real URL.
-
-Do not attach a custom domain or modify an existing production site without
-explicit authorization.
+Share the draft URL returned by Netlify. For a guided demo with live playback
+and draft attachment, run the local API-backed studio and share your screen.
+A hosted API-mode storefront would need an authorised, reachable HTTPS API,
+`VITE_DATA_MODE=api`, its public `VITE_API_BASE_URL`, and its exact storefront
+origin in the API's `CORS_ORIGINS`. A client's browser cannot use your loopback
+address. Keep the operator capability and studio off the public network.
+CDP-002 validates the build locally. See the [validation record](docs/tasks/CDP-002/closeout.md)
+and [Netlify's draft deployment instructions](https://docs.netlify.com/api-and-cli-guides/cli-guides/get-started-with-cli/).
 
 ---
 
@@ -405,7 +435,9 @@ URLs — the demo serves approved public promotional samples.
 
 ## Architecture
 
-The reasoning behind these choices — creator scoping, the data boundary, the
+The [approved-preview decision](docs/architecture/adr/0002-approved-preview-capability.md) covers the local capability and media withdrawal.
+
+The reasoning behind the foundation choices — creator scoping, the data boundary, the
 demo/real separation, and the seams for media processing, object storage,
 payments, authentication and scheduling — is recorded in
 [`docs/architecture/adr/0001-platform-foundation.md`](docs/architecture/adr/0001-platform-foundation.md).

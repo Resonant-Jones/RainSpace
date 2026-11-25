@@ -5,23 +5,21 @@ import { Artwork } from '../components/Artwork'
 import { Notice } from '../components/Notice'
 import { StatusChip } from '../components/StatusChip'
 import { API_BASE_URL, DATA_MODE } from '../config/env'
+import { editionArt } from '../data/editionArt'
 import type { ContentSummary } from '../data'
 import { useContentData } from '../hooks/useContentData'
 import { formatDate, formatDuration, formatPrice } from '../lib/format'
 import { useCreator } from '../state/creatorContext'
 import { useDemoSession } from '../state/demoSessionContext'
 
-// The standalone fixture storefront uses the same public promo offline.
-const TEASER = '/editions/night-bus-teaser.mp4'
-
 function ReleasePreview({ item, creatorSlug }: { item: ContentSummary; creatorSlug: string }) {
   const [state, setState] = useState<'poster' | 'playing' | 'failed'>('poster')
-  const audioOnly = creatorSlug === 'demo' && item.slug === 'field-recording-notes'
+  const audioOnly = editionArt(creatorSlug, item.slug)?.audio
   const preview = item.media.find((asset) => asset.asset_type === 'preview' && asset.mime_type === 'video/mp4')
-  const bundled = creatorSlug === 'demo' && (audioOnly || item.slug === 'night-bus-short-film')
   const [resolved, setResolved] = useState<{ path: string | null; failed: boolean } | null>(null)
   const [attempt, setAttempt] = useState(0)
-  const endpoint = `${API_BASE_URL.replace(/\/$/, '')}/api/creators/${encodeURIComponent(creatorSlug)}/catalog/${encodeURIComponent(item.slug)}/preview`
+  const route = `/api/creators/${encodeURIComponent(creatorSlug)}/catalog/${encodeURIComponent(item.slug)}/preview`
+  const endpoint = `${API_BASE_URL.replace(/\/$/, '')}${route}`
 
   useEffect(() => {
     if (!preview || DATA_MODE !== 'api') return
@@ -31,19 +29,19 @@ function ReleasePreview({ item, creatorSlug }: { item: ContentSummary; creatorSl
         const result = await fetch(endpoint, { signal: controller.signal, cache: 'no-store' })
         if (!result.ok && result.status !== 404) throw new Error('Preview lookup failed')
         const path: unknown = result.ok ? (await result.json()).path : null
-        if (path !== null && (typeof path !== 'string' || !/^\/editions\/[a-zA-Z0-9_-]+\.mp4$/.test(path))) {
+        if (path !== null && path !== `${route}/bytes`) {
           throw new Error('Unsupported public preview')
         }
-        if (!controller.signal.aborted) setResolved({ path, failed: false })
+        if (!controller.signal.aborted) setResolved({ path: path ? `${endpoint}/bytes` : null, failed: false })
       } catch {
         if (!controller.signal.aborted) setResolved({ path: null, failed: true })
       }
     }
     void resolvePreview()
     return () => controller.abort()
-  }, [endpoint, preview, attempt])
+  }, [route, endpoint, preview, attempt])
 
-  const source = DATA_MODE === 'api' ? resolved?.path : bundled ? TEASER : null
+  const source = resolved?.path
   const available = preview && source
   const playing = available && state === 'playing'
   return (
@@ -68,7 +66,9 @@ function ReleasePreview({ item, creatorSlug }: { item: ContentSummary; creatorSl
           ? <p className="preview-message" role="alert">The preview could not be loaded.{' '}
               <button className="link-button" onClick={() => setAttempt(current => current + 1)}>Retry</button>
             </p>
-          : <p className="preview-message">A public preview is unavailable for this release.</p>)}
+          : <p className="preview-message">{preview && DATA_MODE === 'fixtures'
+              ? 'Playback for this sample is available in the API-backed demo.'
+              : 'A public preview is unavailable for this release.'}</p>)}
     </div>
   )
 }

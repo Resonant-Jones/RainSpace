@@ -1,15 +1,30 @@
 """Persistence and scope of the local draft attachment capability."""
 
+from hashlib import sha256
+from secrets import token_hex
+
 from sqlalchemy import select
 
-from app.models.entities import ContentItem, PublicationStatus
+from app.api.derivatives import NIGHT_BUS
+
+from app.models.entities import ContentItem, MediaAsset, MediaAssetType, PublicationStatus
 from tests.conftest import make_content, make_creator
 
 STUDIO = "/api/creators/demo/studio/draft-previews"
 CATALOG = "/api/creators/demo/catalog"
 PREVIEW = "night-bus-teaser"
-TOKEN = "isolated-test-capability-for-draft-previews"
+TOKEN = token_hex(32)
 HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+
+
+def grant(db, owner):
+    source = make_content(db, owner, "reviewed-source", status=PublicationStatus.ARCHIVED)
+    asset = MediaAsset(content_item_id=source.id, asset_type=MediaAssetType.PREVIEW,
+                       storage_object_key=f"{owner.slug}/internal/approved", mime_type="video/mp4",
+                       checksum_sha256=NIGHT_BUS.digest, is_protected=False)
+    db.add(asset)
+    db.flush()
+    return asset
 
 
 def selection(preview_id=PREVIEW, previous=None):
@@ -18,7 +33,9 @@ def selection(preview_id=PREVIEW, previous=None):
 
 def test_save_refresh_retry_remove_and_visibility(client, db, monkeypatch):
     monkeypatch.setenv("DRAFT_PREVIEW_TOKEN", TOKEN)
-    item = make_content(db, make_creator(db, "demo"), "workshop", status=PublicationStatus.DRAFT)
+    owner = make_creator(db, "demo")
+    grant(db, owner)
+    item = make_content(db, owner, "workshop", status=PublicationStatus.DRAFT)
     db.commit()
     url = f"{STUDIO}/workshop"
     assert client.get(STUDIO, headers=HEADERS).json()["drafts"][0]["preview_id"] is None
@@ -38,6 +55,7 @@ def test_save_refresh_retry_remove_and_visibility(client, db, monkeypatch):
 
 def test_studio_capability_and_draft_scope(client, db, monkeypatch):
     owner = make_creator(db, "demo")
+    grant(db, owner)
     other = make_creator(db, "other")
     own = make_content(db, owner, "shared", status=PublicationStatus.DRAFT)
     theirs = make_content(db, other, "shared", status=PublicationStatus.DRAFT)
@@ -64,7 +82,9 @@ def test_studio_capability_and_draft_scope(client, db, monkeypatch):
 
 def test_approved_preview_follows_release_if_later_published(client, db, monkeypatch):
     monkeypatch.setenv("DRAFT_PREVIEW_TOKEN", TOKEN)
-    item = make_content(db, make_creator(db, "demo"), "another-film", status=PublicationStatus.DRAFT)
+    owner = make_creator(db, "demo")
+    grant(db, owner)
+    item = make_content(db, owner, "another-film", status=PublicationStatus.DRAFT)
     db.commit()
     client.put(f"{STUDIO}/another-film", headers=HEADERS, json=selection()).raise_for_status()
     # Model a future publication only inside the disposable test schema.
@@ -75,5 +95,9 @@ def test_approved_preview_follows_release_if_later_published(client, db, monkeyp
     ]
     res = client.get(f"{CATALOG}/another-film/preview")
     assert res.status_code == 200
-    assert res.json()["path"] == "/editions/night-bus-teaser.mp4"
+    assert res.json()["path"] == f"{CATALOG}/another-film/preview/bytes"
+    media = client.get(res.json()["path"])
+    assert media.status_code == 200
+    assert media.headers["content-type"] == "video/mp4"
+    assert sha256(media.content).hexdigest() == NIGHT_BUS.digest
     assert client.get(STUDIO, headers=HEADERS).json()["drafts"] == []

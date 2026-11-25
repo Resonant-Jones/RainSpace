@@ -25,6 +25,10 @@ test('primary navigation path: storefront to catalogue to content', async ({ pag
   await expect(
     page.getByRole('heading', { name: 'Night Bus: A Short Film', level: 1 }),
   ).toBeVisible()
+  await expect(page.getByText('Playback for this sample is available in the API-backed demo.')).toBeVisible()
+  const legacy = await page.request.get('/editions/night-bus-teaser.mp4')
+  expect(legacy.headers()['content-type']).not.toContain('video/mp4')
+  expect((await legacy.body()).subarray(4, 8).toString()).not.toBe('ftyp')
 })
 
 test('filters change the catalogue without a backend', async ({ page }) => {
@@ -93,4 +97,22 @@ test('the storefront loads with no backend running', async ({ page }) => {
   await page.goto('/videos')
   await expect(page.getByRole('heading', { name: 'Catalogue', level: 1 })).toBeVisible()
   await expect(page.getByTestId('demo-banner')).toBeVisible()
+})
+
+test('every route discloses simulated operations and source without interaction', async ({ page }) => {
+  const routes = ['/', '/videos', '/videos/night-bus-short-film', '/blog', '/messages', '/login',
+    '/library', '/admin', '/admin/content', '/admin/schedule', '/missing-route']
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 })
+    for (const route of routes) {
+      await page.goto(route)
+      const banner = page.getByTestId('demo-banner')
+      await expect(banner.getByText(/Sign-in, checkout, messages and creator operations are simulated/)).toBeInViewport()
+      await expect(banner.getByText(/Catalogue source · Bundled demo fixtures/)).toBeInViewport()
+      console.log(width, route, 'disclosure and source visible before interaction')
+      if (process.env.CDP_PROOF_DIR && (route === '/' || route === '/admin/content')) {
+        await page.screenshot({ path: `${process.env.CDP_PROOF_DIR}/${width}-${route === '/' ? 'home' : 'console'}.png` })
+      }
+    }
+  }
 })

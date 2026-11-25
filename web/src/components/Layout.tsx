@@ -61,9 +61,9 @@ export function Layout() {
               <BrandName className="brand-name">{name}</BrandName>
             </Link>
           </div>
-          <DemoBanner key={`demo-${pathname}`} />
           <Navigation key={pathname} />
         </div>
+        <DemoBanner key={pathname} />
       </header>
       <main className="site-main"><Outlet /></main>
       <footer className="site-footer">

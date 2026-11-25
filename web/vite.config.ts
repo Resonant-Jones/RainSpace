@@ -44,7 +44,8 @@ export default defineConfig(({ mode, command, isPreview }) => ({
   preview: {
     host: '127.0.0.1',
     port: 4173,
-    proxy: {},
+    // The integration suite serves its API-mode build on an isolated loopback port.
+    proxy: isPreview && mode === 'studio-e2e' ? studioProxy(mode) : {},
   },
   build: {
     outDir: 'dist',

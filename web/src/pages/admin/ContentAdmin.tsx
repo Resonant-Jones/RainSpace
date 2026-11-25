@@ -74,7 +74,7 @@ export function AdminContent() {
         </p>
       </header>
 
-      {DATA_MODE === 'api' && import.meta.env.DEV && <DraftPreviews key={slug} creatorSlug={slug} />}
+      {DATA_MODE === 'api' && (import.meta.env.DEV || import.meta.env.MODE === 'studio-e2e') && <DraftPreviews key={slug} creatorSlug={slug} />}
       <Notice tone="warning" title="Sample inventory · Demonstration only">
         The inventory below uses sample rows. Title edits, uploads and editorial steps are simulated.
       </Notice>

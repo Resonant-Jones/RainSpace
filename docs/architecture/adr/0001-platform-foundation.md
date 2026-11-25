@@ -5,6 +5,14 @@
 - **Task:** CDP-001 — scaffold a deployable creator distribution platform foundation
 - **Scope:** the repository, the public catalog API, the storefront demonstration, the creator console demonstration, and the boundaries that later tasks will build on
 
+## Amendment · 2026-11-25
+
+CDP-001 established a public catalogue and simulated console. Commits `7cb93dd` and
+`39d9c5a` introduced a promotional sample and a real, local draft attachment.
+[ADR-0002](0002-approved-preview-capability.md) records that exception and the
+subsequent decision to check live approval when serving bytes. The sections below
+describe the amended contract. The original text is preserved in `7b62ae1`.
+
 ## Context
 
 The product goal is a Shopify-like infrastructure layer for independent
@@ -92,8 +100,7 @@ non-nullable `creator_id` foreign key with `ON DELETE CASCADE`. Uniqueness is
 scoped per creator (`uq_content_items_creator_slug`), so two creators may
 independently use the same content slug.
 
-Public reads resolve the requested creator slug to a creator id first, and
-then constrain every subsequent query by `creator_id`. The caller's slug never
+Public reads constrain rows to the requested creator through its resolved ID or a join on the owning creator. The caller's slug never
 selects rows directly. This is the rule that makes a content slug belonging
 to another creator unreachable rather than merely inconvenient.
 
@@ -105,7 +112,7 @@ disclosed.
 
 ### 5. Public payload exposure
 
-The public schemas are the single definition of what leaves the backend.
+The public catalogue schemas define the profile, list and detail projections.
 They exclude, by construction:
 
 - media storage object keys — they address private objects;
@@ -113,9 +120,10 @@ They exclude, by construction:
   described by nothing at all;
 - transcript raw text, summaries and embeddings.
 
-Cover art and preview assets are described by role, MIME type and duration
-only. The storefront renders locally generated placeholder artwork derived
-from a slug hash, so no creator media is ever fetched by the public site.
+Catalogue media descriptions contain role, MIME type and duration. The public
+projection excludes protected rows even when their role is preview, teaser or
+cover. The pilot bundles generated promotional stills. A separate public
+metadata route and a byte route apply ADR-0002 to playable derivatives.
 
 ### 6. Demo mode versus real operation
 
@@ -129,9 +137,9 @@ data mode.
 - The simulated purchase contacts no provider, asks for no card details, and
   produces no entitlement. The library is a local list of slugs.
 - Messaging is sample data plus local component state. Nothing is delivered.
-- The creator console reads bundled sample rows. Edits, uploads, status
-  changes and calendar moves change local state and are labelled as
-  demonstrations at the point of use.
+- The console inventory, uploads, calendar and editorial transitions use sample
+  data. The local studio's draft-preview editor reads and writes PostgreSQL
+  through the capability defined in ADR-0002. It cannot publish a draft.
 
 Invariant: a simulated feature must never be able to be mistaken for a real
 one, and no demonstration artefact may be presented as a business outcome.
@@ -139,8 +147,7 @@ one, and no demonstration artefact may be presented as a business outcome.
 ### 7. Creator storefront independence
 
 Branding is data. A creator record carries a theme document, and the
-frontend applies it as CSS custom properties. No component contains a
-creator's name, stage identity, imagery or colour choice. The storefront is
+frontend applies it as CSS custom properties. Pilot artwork and listening-study presentation are optional creator-scoped data. The storefront is
 addressed by creator slug (`VITE_CREATOR_SLUG`), so the same build renders a
 different creator's storefront without a code change.
 
@@ -253,22 +260,20 @@ is authorised anywhere in this platform.
 
 These are real limitations of the shipped foundation, not hypotheticals.
 
-1. **No authentication or authorisation.** Every endpoint is public. The
-   creator-scoping tests prove that one creator's content cannot be read
-   through another creator's URL. They do **not** prove that a creator
-   cannot read another creator's data by other means, because there is no
-   identity layer yet.
+1. **No user identity or role system.** The catalogue is public and read-only.
+   The studio uses a development-only operator capability bound to one creator
+   and to drafts. Tests cover those routes and their refusals.
 2. **No rate limiting, no abuse controls, no abuse monitoring.** The API
    should not be exposed to the public internet in this state.
 3. **Rate limits and quotas are absent** for ingestion, embedding and
    playback paths.
-4. **Media is not served at all.** There is no upload path, no transcoding,
-   no signed URL issuance and no CDN. The storefront shows generated
-   placeholders.
-5. **No signed access path for originals** — `is_protected` is a flag, and
-   the enforcement layer that honours it does not exist yet.
-6. **No secret management.** The API reads a database URL from the
-   environment. There is no credential rotation, no per-environment secret
+4. **Reviewed preview bytes only.** The API checks live approval and
+   publication before public playback. Upload, transcoding, signed URLs and
+   CDN delivery remain deferred.
+5. **No delivery path for originals.** The catalogue filters protected rows.
+   Original and paid content storage and entitlement checks remain deferred.
+6. **No secret management.** The API reads a database URL and the local operator capability from the
+   environment. Rotation is manual. There is no automated rotation, no per-environment secret
    store and no secret scanning in the deployment path.
 7. **No observability beyond a health endpoint.** No structured logging, no
    metrics, no tracing, no alerting. The health endpoint reports service
@@ -277,7 +282,8 @@ These are real limitations of the shipped foundation, not hypotheticals.
    uses an unencrypted volume with no backup policy.
 9. **The demo session is client-side only.** It is trivially editable and
    proves nothing about authorisation.
-10. **Embeddings and transcripts are not yet populated.** The columns exist
+10. **No generated embeddings or transcripts.** The seed includes fictional
+    transcript text. Embeddings are empty. The columns exist
     so the storage contract is fixed; the retrieval quality of the eventual
     embedding model is unproven and unmeasured.
 11. **The sample data in the creator console is fictional.** Earnings,
@@ -288,8 +294,8 @@ These are real limitations of the shipped foundation, not hypotheticals.
 
 - The demo can be run and demonstrated with no backend, and separately
   against a real PostgreSQL database, from one codebase.
-- The tenancy rules are enforced in one place — the catalog router — and are
-  covered by tests that run against a real database with real migrations.
+- The catalogue and studio routers enforce creator scope in their database queries.
+  Their tests run on PostgreSQL with real migrations.
 - Later tasks can add media processing, storage, payments, authentication
   and scheduling without changing the creator-scoping model or the public
   payload contract.

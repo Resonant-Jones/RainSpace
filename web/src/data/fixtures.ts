@@ -1,7 +1,7 @@
 import type { ContentSummary, Creator } from './types'
 
-/** Offline catalogue for the generic demo creator. The release descriptions
- * and public preview metadata mirror the Rainspace Editions demo seed.
+/** Offline catalogue for the generic demo creator. The catalogue includes illustrative preview
+ * metadata. Playable derivatives require a live approval check on the API.
  */
 export const demoCreator: Creator = {
   slug: 'demo',

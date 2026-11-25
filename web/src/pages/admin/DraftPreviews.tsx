@@ -11,7 +11,6 @@ interface Draft {
 interface Preview {
   id: string
   title: string
-  path: string
 }
 interface Inventory {
   drafts: Draft[]
@@ -19,6 +18,36 @@ interface Inventory {
 }
 
 const headers = { 'X-Studio-Request': 'draft-preview' }
+
+function DraftPlayer({ endpoint, title }: { endpoint: string; title: string }) {
+  const [source, setSource] = useState('')
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    const controller = new AbortController()
+    let url = ''
+    async function load() {
+      try {
+        const response = await fetch(endpoint, { headers, cache: 'no-store', signal: controller.signal })
+        if (!response.ok) throw new Error('Preview unavailable')
+        const blob = await response.blob()
+        if (!controller.signal.aborted) {
+          url = URL.createObjectURL(blob)
+          setSource(url)
+        }
+      } catch {
+        if (!controller.signal.aborted) setFailed(true)
+      }
+    }
+    void load()
+    return () => {
+      controller.abort()
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [endpoint])
+  if (failed) return <p role="alert">The saved sample could not be played.</p>
+  return source && <video src={source} controls preload="metadata" playsInline aria-label={title}
+    onError={() => setFailed(true)} style={{ width: '100%', maxWidth: '36rem' }} />
+}
 
 function AttachmentForm({ draft, previews, endpoint, onSaved, onReload }: {
   draft: Draft
@@ -79,8 +108,7 @@ function AttachmentForm({ draft, previews, endpoint, onSaved, onReload }: {
       <p role="status">
         {saved ? `Attached preview · ${saved.title}` : draft.preview_id ? 'The attached preview is no longer approved.' : 'No preview attached.'}
       </p>
-      {saved && <video key={saved.id} src={saved.path} controls preload="metadata" playsInline
-        aria-label={saved.title} style={{ width: '100%', maxWidth: '36rem' }} />}
+      {saved && <DraftPlayer endpoint={`${endpoint}/${encodeURIComponent(draft.slug)}`} title={saved.title} />}
     </>
   )
 }

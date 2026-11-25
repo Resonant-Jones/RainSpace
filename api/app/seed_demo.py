@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.derivatives import NIGHT_BUS
 from app.config import get_settings
 from app.db.base import SessionLocal
 from app.models.entities import (
@@ -55,6 +56,7 @@ _PUBLISHED = [
         "published_at": datetime(2026, 1, 14, 17, 0, tzinfo=timezone.utc),
         "duration_seconds": 812.0,
         "preview_seconds": 18.0,
+        "preview_id": NIGHT_BUS.id,
         "transcript": {
             "raw_text": (
                 "Placeholder transcript for the demo catalogue entry. It exists so the "
@@ -95,6 +97,8 @@ _PUBLISHED = [
         "published_at": datetime(2026, 3, 22, 20, 15, tzinfo=timezone.utc),
         "duration_seconds": 1563.0,
         "preview_seconds": 18.0,
+        "preview_id": NIGHT_BUS.id,
+        "preview_digest": NIGHT_BUS.digest,
         "transcript": {
             "raw_text": "Placeholder transcript for the demo catalogue entry.",
             "summary": "Placeholder summary for a demo short film entry.",
@@ -152,7 +156,8 @@ def _upsert_content(db: Session, creator: Creator, spec: dict) -> ContentItem:
         )
     )
     if content is None:
-        content = ContentItem(creator_id=creator.id, slug=spec["slug"])
+        content = ContentItem(creator_id=creator.id, slug=spec["slug"],
+                              approved_preview_id=spec.get("preview_id"))
         db.add(content)
 
     content.title = spec["title"]
@@ -170,14 +175,14 @@ def _upsert_media(db: Session, content: ContentItem, spec: dict) -> MediaAsset:
         select(MediaAsset).where(MediaAsset.storage_object_key == spec["object_key"])
     )
     if asset is None:
-        asset = MediaAsset(storage_object_key=spec["object_key"])
+        asset = MediaAsset(storage_object_key=spec["object_key"],
+                           checksum_sha256=spec.get("checksum_sha256"),
+                           is_protected=spec.get("is_protected", True))
         db.add(asset)
     asset.content_item_id = content.id
     asset.asset_type = spec["asset_type"]
     asset.mime_type = spec["mime_type"]
     asset.duration_seconds = spec.get("duration_seconds")
-    asset.checksum_sha256 = spec.get("checksum_sha256")
-    asset.is_protected = spec.get("is_protected", True)
     db.flush()
     return asset
 
@@ -247,6 +252,7 @@ def _seed_content_item(db: Session, creator: Creator, spec: dict) -> None:
                 "asset_type": MediaAssetType.PREVIEW,
                 "mime_type": "video/mp4",
                 "duration_seconds": spec["preview_seconds"],
+                "checksum_sha256": spec.get("preview_digest"),
                 "is_protected": False,
             },
         )
@@ -310,7 +316,7 @@ def main() -> None:
     print("Demo seed complete.")
     print(f"  creator slug : {result['creator']}")
     print(f"  content items: {result['total']}")
-    print("  Installed the demonstration catalogue. Public previews ship with the storefront.")
+    print("  Installed the demonstration catalogue. Approved samples are served by the API.")
 
 
 if __name__ == "__main__":

@@ -10,11 +10,11 @@ Unpublished content returns 404 - the same response as unknown content - so
 the existence of drafts is not disclosed.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.draft_previews import APPROVED
+from app.api.derivatives import Derivative, approved_for, require_selection
 from app.db.base import get_db
 from app.models.entities import (
     ContentItem,
@@ -50,12 +50,11 @@ def _get_creator_or_404(db: Session, creator_slug: str) -> Creator:
     return creator
 
 
-def _public_media(content: ContentItem, creator_slug: str) -> list[MediaAssetPublic]:
-    approved = APPROVED.get(creator_slug, {}).get(content.approved_preview_id)
+def _public_media(content: ContentItem, approved: Derivative | None) -> list[MediaAssetPublic]:
     assets = [
         asset for asset in content.media_assets
         if not asset.is_protected and asset.asset_type in PUBLIC_ASSET_TYPES
-        and not (approved and asset.asset_type == MediaAssetType.PREVIEW)
+        and not (content.approved_preview_id and asset.asset_type == MediaAssetType.PREVIEW)
     ]
     media = [
         MediaAssetPublic(
@@ -74,8 +73,8 @@ def _public_media(content: ContentItem, creator_slug: str) -> list[MediaAssetPub
     return media
 
 
-def _to_summary(content: ContentItem, creator_slug: str) -> ContentSummaryPublic:
-    media = _public_media(content, creator_slug)
+def _to_summary(content: ContentItem, approved: dict[str, Derivative]) -> ContentSummaryPublic:
+    media = _public_media(content, approved.get(content.approved_preview_id))
     durations = [m.duration_seconds for m in media if m.duration_seconds is not None]
     return ContentSummaryPublic(
         slug=content.slug,
@@ -114,7 +113,8 @@ def get_catalog(creator_slug: str, db: Session = Depends(get_db)) -> list[Conten
         .options(selectinload(ContentItem.media_assets))
         .order_by(ContentItem.published_at.desc().nullslast(), ContentItem.created_at.desc())
     )
-    return [_to_summary(content, creator_slug) for content in db.scalars(stmt)]
+    approved = approved_for(db, creator_slug)
+    return [_to_summary(content, approved) for content in db.scalars(stmt)]
 
 
 @router.get(
@@ -143,12 +143,11 @@ def get_content(
             status_code=status.HTTP_404_NOT_FOUND, detail="content not found"
         )
 
-    summary = _to_summary(content, creator_slug)
+    summary = _to_summary(content, approved_for(db, creator_slug))
     return ContentDetailPublic(**summary.model_dump())
 
 
-@router.get("/{creator_slug}/catalog/{content_slug}/preview")
-def get_public_preview(creator_slug: str, content_slug: str, db: Session = Depends(get_db)):
+def _published_sample(db: Session, creator_slug: str, content_slug: str) -> Derivative:
     item = db.scalar(
         select(ContentItem).join(Creator).where(
             Creator.slug == creator_slug,
@@ -156,15 +155,18 @@ def get_public_preview(creator_slug: str, content_slug: str, db: Session = Depen
             ContentItem.status == PublicationStatus.PUBLISHED,
         )
     )
-    approved = APPROVED.get(creator_slug, {}).get(item.approved_preview_id) if item else None
-    # The original seeded releases predate the attachment column.
-    if item and item.approved_preview_id is None and item.slug in {"night-bus-short-film", "field-recording-notes"}:
-        has_public_sample = any(
-            asset.asset_type == MediaAssetType.PREVIEW and not asset.is_protected
-            for asset in item.media_assets
-        )
-        if has_public_sample:
-            approved = APPROVED.get(creator_slug, {}).get("night-bus-teaser")
-    if not approved:
-        raise HTTPException(404, "Preview unavailable")
-    return approved.choice()
+    return require_selection(db, creator_slug, item)
+
+
+@router.get("/{creator_slug}/catalog/{content_slug}/preview")
+def get_public_preview(creator_slug: str, content_slug: str, request: Request, response: Response,
+                       db: Session = Depends(get_db)):
+    sample = _published_sample(db, creator_slug, content_slug)
+    response.headers["Cache-Control"] = "no-store"
+    return {**sample.choice(), "path": request.url_for("public_preview_bytes", creator_slug=creator_slug,
+                                                       content_slug=content_slug).path}
+
+
+@router.get("/{creator_slug}/catalog/{content_slug}/preview/bytes")
+def public_preview_bytes(creator_slug: str, content_slug: str, db: Session = Depends(get_db)):
+    return _published_sample(db, creator_slug, content_slug).stream()
